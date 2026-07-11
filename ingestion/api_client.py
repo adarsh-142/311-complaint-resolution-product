@@ -9,6 +9,51 @@ from urllib3.util.retry import Retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
+def _normalize_date_window(start_date: str | None, end_date: str | None) -> tuple[str, str]:
+    """Normalize date window to valid YYYY-MM-DD strings.
+
+    - Swaps dates if start > end.
+    - Caps end date to today to avoid future-date empty windows.
+    """
+    today = datetime.now().date()
+
+    def _parse_date(value: str | None):
+        if not value:
+            return None
+        text = str(value).strip()
+        try:
+            # Accept full datetime-style strings as well.
+            return datetime.fromisoformat(text.replace("Z", "")).date()
+        except ValueError:
+            return datetime.strptime(text[:10], "%Y-%m-%d").date()
+
+    start = _parse_date(start_date)
+    end = _parse_date(end_date)
+
+    if start and end and start > end:
+        start, end = end, start
+
+    if end and end > today:
+        end = today
+
+    if start and end and start > end:
+        # Edge case after capping end to today.
+        start = end
+
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+def _build_params(batch_size: int, offset: int, start_date: str, end_date: str, use_date_filter: bool):
+    params = {
+        "$limit": batch_size,
+        "$offset": offset,
+        "$order": "created_date ASC" if use_date_filter else "created_date DESC",
+    }
+    if use_date_filter:
+        params["$where"] = f"created_date BETWEEN '{start_date}T00:00:00' AND '{end_date}T23:59:59'"
+    return params
+
+
 def fetch_311_data(
     api_url: str,
     total_limit: int = 5000,
@@ -22,11 +67,13 @@ def fetch_311_data(
 
     from core.config import settings
     
-    # Use provided dates or fall back to config settings
+    # Use provided dates or fall back to config settings.
     if start_date is None:
         start_date = settings.API_START_DATE
     if end_date is None:
         end_date = settings.API_END_DATE
+
+    start_date, end_date = _normalize_date_window(start_date, end_date)
     
     all_data = []
     offset = 0
@@ -51,9 +98,8 @@ def fetch_311_data(
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
-    # Format dates for SOQL query
     print(f"\n[FETCH] Fetching data from {start_date} to {end_date}")
-    soql_date_filter = f"created_date BETWEEN '{start_date}T00:00:00' AND '{end_date}T23:59:59'"
+    use_date_filter = True
 
     while unlimited or len(all_data) < total_limit:
 
@@ -69,12 +115,13 @@ def fetch_311_data(
             f"\n[BATCH] Offset={offset} | Records fetched={finished_message} | Batch size={current_batch_size}"
         )
 
-        params = {
-            "$limit": current_batch_size,
-            "$offset": offset,
-            "$where": soql_date_filter,
-            "$order": "created_date ASC",
-        }
+        params = _build_params(
+            batch_size=current_batch_size,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+            use_date_filter=use_date_filter,
+        )
 
         try:
             # Reset retry count for this offset if request succeeds
@@ -98,6 +145,14 @@ def fetch_311_data(
             print(f"[OK] Request completed in {request_time:.2f}s | Batch: {len(batch)} records")
 
             if not batch:
+                if offset == 0 and use_date_filter:
+                    # If date-filtered fetch is empty, fallback to latest available records.
+                    print("[INFO] Date-filtered query returned no rows. Falling back to latest available records.")
+                    use_date_filter = False
+                    offset = 0
+                    all_data = []
+                    continue
+
                 done_message = f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
                 print(f"\n[DONE] NO MORE RECORDS - Total fetched: {done_message}")
                 return all_data

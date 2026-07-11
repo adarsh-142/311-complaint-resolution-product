@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 
 class Settings:
-    APP_NAME = "Agentic Analytics System"
+    APP_NAME = "311 Complaints Analytics System"
     DATA_PATH = os.getenv("DATA_PATH", "data/raw/")
     PROCESSED_PATH = os.getenv("PROCESSED_PATH", "data/processed/")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
