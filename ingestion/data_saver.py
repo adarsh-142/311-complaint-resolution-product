@@ -1,10 +1,11 @@
-from core.config import settings
 import json
 import os
 from datetime import datetime
 
+from core.config import settings
+
+
 def save_raw_data(data):
-    
     base_path = settings.DATA_PATH
     os.makedirs(base_path, exist_ok=True)
 

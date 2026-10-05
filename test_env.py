@@ -1,5 +1,5 @@
-import sys
 import subprocess
+import sys
 
 # 1. Python executable correctness
 print("PYTHON EXECUTABLE:")
@@ -9,9 +9,7 @@ print("-" * 50)
 # 2. subprocess stability test
 print("SUBPROCESS TEST:")
 result = subprocess.run(
-    [sys.executable, "-c", "print('WORKER TEST OK')"],
-    capture_output=True,
-    text=True
+    [sys.executable, "-c", "print('WORKER TEST OK')"], capture_output=True, text=True
 )
 
 print("STDOUT:", result.stdout)

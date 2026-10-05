@@ -27,7 +27,7 @@ ENV/
 spark-warehouse/
 metastore_db/
 derby.log
-C:/spark-temp/
+.spark-local/
 
 # ── Data files (raw, processed, large) ───────────────────────────────────────
 data/raw/
@@ -46,4 +46,3 @@ Thumbs.db
 .idea/
 
 # ── Docker build cache ───────────────────────────────────────────────────────
-docker/*.tar

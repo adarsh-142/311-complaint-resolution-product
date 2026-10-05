@@ -1,21 +1,27 @@
 import os
 import socket
-from fastapi import FastAPI
-from api.routes import router
-from core.logger import setup_logger
 
-os.environ.setdefault("HADOOP_HOME", "C:\\Hadoop")
-os.environ["PATH"] = os.environ.get("PATH", "") + ";C:\\Hadoop\\bin"
+from fastapi import FastAPI
+
+from api.exception_handlers import register_exception_handlers
+from api.middleware import register_request_middleware
+from api.routes import router
+from core.config import settings
+from core.logger import setup_logger
 
 setup_logger()
 
 app = FastAPI(
-    title="Agentic Analytics System",
+    title=settings.APP_NAME,
     description="AI-powered 311 Service Optimization System",
-    version="1.0"
+    version=settings.APP_VERSION,
+    docs_url=settings.API_DOCS_URL,
+    openapi_url=settings.API_OPENAPI_URL,
 )
 
+register_request_middleware(app)
 app.include_router(router)
+register_exception_handlers(app)
 
 
 def get_available_port(default_port: int = 8000) -> int:

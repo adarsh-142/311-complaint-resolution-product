@@ -1,6 +1,6 @@
-﻿import time
-from typing import Any
+import time
 from datetime import datetime
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -43,7 +43,9 @@ def _normalize_date_window(start_date: str | None, end_date: str | None) -> tupl
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
-def _build_params(batch_size: int, offset: int, start_date: str, end_date: str, use_date_filter: bool):
+def _build_params(
+    batch_size: int, offset: int, start_date: str, end_date: str, use_date_filter: bool
+):
     params = {
         "$limit": batch_size,
         "$offset": offset,
@@ -64,9 +66,8 @@ def fetch_311_data(
     start_date: str = None,
     end_date: str = None,
 ) -> list[dict[str, Any]]:
-
     from core.config import settings
-    
+
     # Use provided dates or fall back to config settings.
     if start_date is None:
         start_date = settings.API_START_DATE
@@ -74,7 +75,7 @@ def fetch_311_data(
         end_date = settings.API_END_DATE
 
     start_date, end_date = _normalize_date_window(start_date, end_date)
-    
+
     all_data = []
     offset = 0
     offset_retry_count = {}  # Track retries per offset
@@ -102,15 +103,16 @@ def fetch_311_data(
     use_date_filter = True
 
     while unlimited or len(all_data) < total_limit:
-
         # Calculate remaining records to fetch
         if unlimited:
             current_batch_size = batch_size
         else:
             remaining = total_limit - len(all_data)
             current_batch_size = min(batch_size, remaining)
-        
-        finished_message = f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
+
+        finished_message = (
+            f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
+        )
         print(
             f"\n[BATCH] Offset={offset} | Records fetched={finished_message} | Batch size={current_batch_size}"
         )
@@ -147,22 +149,30 @@ def fetch_311_data(
             if not batch:
                 if offset == 0 and use_date_filter:
                     # If date-filtered fetch is empty, fallback to latest available records.
-                    print("[INFO] Date-filtered query returned no rows. Falling back to latest available records.")
+                    print(
+                        "[INFO] Date-filtered query returned no rows. Falling back to latest available records."
+                    )
                     use_date_filter = False
                     offset = 0
                     all_data = []
                     continue
 
-                done_message = f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
+                done_message = (
+                    f"{len(all_data)}/{total_limit}"
+                    if not unlimited
+                    else f"{len(all_data)}/unlimited"
+                )
                 print(f"\n[DONE] NO MORE RECORDS - Total fetched: {done_message}")
                 return all_data
 
             all_data.extend(batch)
-            
+
             # Reset retry counter on success
             offset_retry_count[offset] = 0
 
-            progress_message = f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
+            progress_message = (
+                f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
+            )
             print(f"[PROGRESS] Total progress: {progress_message} records")
 
             # Only increment by actual batch received for safe pagination
@@ -176,14 +186,8 @@ def fetch_311_data(
             # avoid hammering API
             time.sleep(0.2)
 
-
         except requests.exceptions.RequestException as e:
-
-            status_code = getattr(
-                e.response,
-                "status_code",
-                None
-            )
+            status_code = getattr(e.response, "status_code", None)
 
             is_retryable = isinstance(
                 e,
@@ -199,9 +203,7 @@ def fetch_311_data(
                 is_retryable = True
 
             if not is_retryable:
-                raise Exception(
-                    f"[ERROR] Non-retryable API Error: {e}"
-                ) from e
+                raise Exception(f"[ERROR] Non-retryable API Error: {e}") from e
 
             # Increment retry counter for this offset
             offset_retry_count[offset] = offset_retry_count.get(offset, 0) + 1
@@ -215,7 +217,7 @@ def fetch_311_data(
                 )
                 return all_data
 
-            backoff_wait = backoff_factor ** retry_count
+            backoff_wait = backoff_factor**retry_count
             print(
                 f"[RETRY] Retriable error (status={status_code}, retry {retry_count}/{MAX_RETRIES_PER_OFFSET}) - "
                 f"waiting {backoff_wait:.1f}s before retry..."
@@ -224,9 +226,9 @@ def fetch_311_data(
             time.sleep(backoff_wait)
             # Continue loop without incrementing offset - retry same batch
 
-    final_message = f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
-    print(
-        f"\n[FINAL] FINAL INGESTED RECORDS: {final_message}"
+    final_message = (
+        f"{len(all_data)}/{total_limit}" if not unlimited else f"{len(all_data)}/unlimited"
     )
+    print(f"\n[FINAL] FINAL INGESTED RECORDS: {final_message}")
 
     return all_data if unlimited else all_data[:total_limit]

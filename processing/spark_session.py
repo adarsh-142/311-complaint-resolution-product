@@ -1,6 +1,18 @@
 import os
 import sys
 
+from core.config import settings
+
+
+def _append_env_path(name: str, value: str) -> None:
+    existing = os.environ.get(name, "")
+    if not existing:
+        os.environ[name] = value
+        return
+    values = existing.split(os.pathsep)
+    if value not in values:
+        os.environ[name] = existing + os.pathsep + value
+
 
 def _get_windows_short_path(path: str) -> str:
     """Return 8.3 short path on Windows to avoid issues with spaces in paths.
@@ -39,23 +51,33 @@ def get_spark_session(app_name: str = "AgenticAnalyticsSystem"):
     os.environ["PYSPARK_PYTHON"] = py_exec_short
     os.environ["PYSPARK_DRIVER_PYTHON"] = py_exec_short
     os.environ["PYSPARK_DRIVER_PYTHON_OPTS"] = ""
-    os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
-    os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + os.pathsep + os.getcwd()
+    os.environ.setdefault("SPARK_LOCAL_IP", settings.SPARK_LOCAL_IP)
+    os.environ.setdefault("SPARK_LOCAL_HOSTNAME", settings.SPARK_LOCAL_HOSTNAME)
+    _append_env_path("PYTHONPATH", os.getcwd())
 
-    if os.name == "nt":
-        os.environ.setdefault("PYSPARK_SUBMIT_ARGS", f"--master local[*] pyspark-shell")
+    if settings.HADOOP_HOME:
+        os.environ.setdefault("HADOOP_HOME", settings.HADOOP_HOME)
+    if settings.HADOOP_BIN_DIR:
+        _append_env_path("PATH", settings.HADOOP_BIN_DIR)
+
+    if settings.PYSPARK_SUBMIT_ARGS:
+        os.environ.setdefault("PYSPARK_SUBMIT_ARGS", settings.PYSPARK_SUBMIT_ARGS)
+
+    os.makedirs(settings.SPARK_LOCAL_DIR, exist_ok=True)
+    os.makedirs(settings.SPARK_WAREHOUSE_DIR, exist_ok=True)
 
     from pyspark.sql import SparkSession
 
     spark = (
-        SparkSession.builder
-        .appName(app_name)
-        .master("local[*]")
-        .config("spark.driver.bindAddress", "127.0.0.1")
-        .config("spark.driver.host", "127.0.0.1")
-        .config("spark.sql.shuffle.partitions", "2")
-        .config("spark.default.parallelism", "2")
-        .config("spark.local.dir", "C:/spark-temp")
+        SparkSession.builder.appName(app_name)
+        .master(settings.SPARK_MASTER)
+        .config("spark.driver.bindAddress", settings.SPARK_DRIVER_BIND_ADDRESS)
+        .config("spark.driver.host", settings.SPARK_DRIVER_HOST)
+        .config("spark.sql.shuffle.partitions", str(settings.SPARK_SHUFFLE_PARTITIONS))
+        .config("spark.default.parallelism", str(settings.SPARK_DEFAULT_PARALLELISM))
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.local.dir", settings.SPARK_LOCAL_DIR)
+        .config("spark.sql.warehouse.dir", settings.SPARK_WAREHOUSE_DIR)
         .config("spark.python.worker.reuse", "false")
         .config("spark.sql.execution.arrow.pyspark.enabled", "false")
         .config("spark.sql.execution.wholeStageCodegen.enabled", "false")

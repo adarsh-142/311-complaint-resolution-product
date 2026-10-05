@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      SPARK_LOCAL_IP: 127.0.0.1
+      SPARK_LOCAL_HOSTNAME: localhost
+      SPARK_DRIVER_BIND_ADDRESS: 127.0.0.1
+      SPARK_DRIVER_HOST: 127.0.0.1
+      SPARK_LOCAL_DIR: /tmp/spark-local-ci
+      SPARK_WAREHOUSE_DIR: /tmp/spark-warehouse-ci
+      SPARK_EXECUTION_MODE: container
+      SPARK_MASTER: local[2]
+      SPARK_SHUFFLE_PARTITIONS: "2"
+      SPARK_DEFAULT_PARALLELISM: "2"
+      SAVE_PROCESSED_SNAPSHOT: "false"
+      PROCESSED_WRITE_PARTITIONS: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: |
+          python -m compileall \
+            main.py \
+            agents \
+            api \
+            core \
+            ingestion \
+            orchestrator \
+            processing \
+            services \
+            tests \
+            test_env.py \
+            test_pipeline.py
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Format check
+        run: python -m ruff format --check .
+
+      - name: Run tests
+        run: python -m pytest -q
